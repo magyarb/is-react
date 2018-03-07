@@ -1,13 +1,15 @@
 import React, {Component} from 'react';
 import logo from './logo.svg';
 import './App.css';
-import Instascan from "instascan";
 import PropTypes from 'prop-types';
-import { findDOMNode } from 'react-dom';
+import {findDOMNode} from 'react-dom';
+import zxing from "instascan/src/zxing.js";
+
+const ZXing = zxing();
 
 function hasGetUserMedia() {
     return !!(navigator.getUserMedia || navigator.webkitGetUserMedia ||
-    navigator.mozGetUserMedia || navigator.msGetUserMedia);
+        navigator.mozGetUserMedia || navigator.msGetUserMedia);
 }
 
 class App extends Component {
@@ -16,7 +18,8 @@ class App extends Component {
         className: '',
         height: 480,
         muted: false,
-        onUserMedia: () => {},
+        onUserMedia: () => {
+        },
         screenshotFormat: 'image/webp',
         width: 640,
     };
@@ -53,6 +56,9 @@ class App extends Component {
         this.state = {
             hasUserMedia: false,
         };
+        setInterval(function () {
+            this.getScan();
+        }.bind(this),200); //here you can set the zxing interval
     }
 
     componentDidMount() {
@@ -63,6 +69,7 @@ class App extends Component {
         if (!this.state.hasUserMedia && !App.userMediaRequested) {
             this.requestUserMedia();
         }
+        this._analyzer = new Analyzer(this.video);
     }
 
     componentWillUnmount() {
@@ -85,15 +92,24 @@ class App extends Component {
         }
     }
 
-    getScreenshot() {
+    getScan() {
         if (!this.state.hasUserMedia) return null;
-
         const canvas = this.getCanvas();
-        return canvas && canvas.toDataURL(this.props.screenshotFormat);
+
+        let analysis = this._analyzer.analyze();
+        if (!analysis) {
+            return null;
+        }
+        else
+        {
+            //here you can extract the result
+            console.log(analysis.result);
+        }
+        return null;
     }
 
     getCanvas() {
-        const video = findDOMNode(this);
+        const video = findDOMNode(this.video);
 
         if (!this.state.hasUserMedia || !video.videoHeight) return null;
 
@@ -108,14 +124,13 @@ class App extends Component {
             this.ctx = canvas.getContext('2d');
         }
 
-        const { ctx, canvas } = this;
+        const {ctx, canvas} = this;
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
         return canvas;
     }
 
     requestUserMedia() {
-        console.log('ez');
         navigator.getUserMedia = navigator.getUserMedia ||
             navigator.webkitGetUserMedia ||
             navigator.mozGetUserMedia ||
@@ -124,13 +139,13 @@ class App extends Component {
         const sourceSelected = (audioSource, videoSource) => {
             const constraints = {
                 video: {
-                    optional: [{ sourceId: videoSource }],
+                    optional: [{sourceId: videoSource}],
                 },
             };
 
             if (this.props.audio) {
                 constraints.audio = {
-                    optional: [{ sourceId: audioSource }],
+                    optional: [{sourceId: audioSource}],
                 };
             }
 
@@ -142,25 +157,19 @@ class App extends Component {
         };
 
         if (this.props.audioSource && this.props.videoSource) {
-            console.log('fck');
-            //sourceSelected(this.props.audioSource, this.props.videoSource);
+            sourceSelected(this.props.audioSource, this.props.videoSource);
         } else if ('mediaDevices' in navigator) {
             navigator.mediaDevices.enumerateDevices().then((devices) => {
                 let audioSource = null;
                 let videoSource = null;
 
                 devices.forEach((device) => {
-                    console.log(device.deviceId);
-                    console.log(device.label);
                     if (device.kind === 'audio') {
                         audioSource = device.id;
-                        console.log('src a ' + device.id);
                     } else if (device.kind === 'video') {
-                        videoSource = 'e17770cb172956acbcd7d924110e3e412bda0bc2c56216f30b0dd2ae966eb8a3';
-                        console.log('src v ' + device.id);
+                        videoSource = device.id;
                     }
                 });
-                videoSource = 'e17770cb172956acbcd7d924110e3e412bda0bc2c56216f30b0dd2ae966eb8a3';
                 sourceSelected(audioSource, videoSource);
             })
                 .catch((error) => {
@@ -174,10 +183,8 @@ class App extends Component {
                 sources.forEach((source) => {
                     if (source.kind === 'audio') {
                         audioSource = source.id;
-                        console.log('src a ' + source.id);
                     } else if (source.kind === 'video') {
                         videoSource = source.id;
-                        console.log('src v ' + source.id);
 
                     }
                 });
@@ -207,7 +214,7 @@ class App extends Component {
             });
 
             this.props.onUserMedia();
-        } catch(error) {
+        } catch (error) {
             this.stream = stream;
             this.video.srcObject = stream;
             this.setState({
@@ -218,17 +225,110 @@ class App extends Component {
 
     render() {
         return (
-            <video
-                autoPlay
-                width={this.props.width}
-                height={this.props.height}
-                src={this.state.src}
-                muted={this.props.muted}
-                className={this.props.className}
-                style={this.props.style}
-                ref={ref => this.video = ref}
-            />
+            <div id={'container'}>
+                <video
+                    autoPlay
+                    width={this.props.width}
+                    height={this.props.height}
+                    src={this.state.src}
+                    muted={this.props.muted}
+                    className={this.props.className}
+                    style={this.props.style}
+                    ref={ref => this.video = ref}
+                />
+            </div>
         );
+    }
+}
+
+class Analyzer {
+    constructor(video) {
+        this.video = video;
+
+        this.imageBuffer = null;
+        this.sensorLeft = null;
+        this.sensorTop = null;
+        this.sensorWidth = null;
+        this.sensorHeight = null;
+
+        this.canvas = document.createElement('canvas');
+        this.canvas.style.display = 'none';
+        this.canvasContext = null;
+
+        this.decodeCallback = ZXing.Runtime.addFunction(function (ptr, len, resultIndex, resultCount) {
+            let result = new Uint8Array(ZXing.HEAPU8.buffer, ptr, len);
+            let str = String.fromCharCode.apply(null, result);
+            if (resultIndex === 0) {
+                window.zxDecodeResult = '';
+            }
+            window.zxDecodeResult += str;
+        });
+
+        this.decodeCallback2 = ZXing.Runtime.addFunction(function(ptr, len, resultIndex, resultCount, p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y) {
+            // Convert the result C string into a JS string.
+            var result = new Uint8Array(ZXing.HEAPU8.buffer, ptr, len);
+            let str = String.fromCharCode.apply(null, result);
+            if (resultIndex === 0) {
+                window.zxDecodeResult = '';
+            }
+            window.zxDecodeResult += str;
+            // drawPointsOnCanvas(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y);
+        });
+    }
+
+    analyze() {
+        if (!this.video.videoWidth) {
+            return null;
+        }
+
+        if (!this.imageBuffer) {
+            let videoWidth = this.video.videoWidth;
+            let videoHeight = this.video.videoHeight;
+
+            this.sensorWidth = videoWidth;
+            this.sensorHeight = videoHeight;
+            this.sensorLeft = Math.floor((videoWidth / 2) - (this.sensorWidth / 2));
+            this.sensorTop = Math.floor((videoHeight / 2) - (this.sensorHeight / 2));
+
+            this.canvas.width = this.sensorWidth;
+            this.canvas.height = this.sensorHeight;
+
+            this.canvasContext = this.canvas.getContext('2d');
+            this.imageBuffer = ZXing._resize(this.sensorWidth, this.sensorHeight);
+            return null;
+        }
+
+        this.canvasContext.drawImage(
+            this.video,
+            this.sensorLeft,
+            this.sensorTop,
+            this.sensorWidth,
+            this.sensorHeight
+        );
+
+        let data = this.canvasContext.getImageData(0, 0, this.sensorWidth, this.sensorHeight).data;
+        for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+            let [r, g, b] = [data[i], data[i + 1], data[i + 2]];
+            ZXing.HEAPU8[this.imageBuffer + j] = Math.trunc((r + g + b) / 3);
+        }
+        try {
+            let err = ZXing._decode_any(this.decodeCallback2);
+
+            if (err) {
+                return null;
+            }
+        }
+        catch(err)
+        {
+            console.log(err);
+        }
+
+        let result = window.zxDecodeResult;
+        if (result != null) {
+            return { result: result, canvas: this.canvas };
+        }
+
+        return null;
     }
 }
 
