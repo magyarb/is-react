@@ -1,8 +1,8 @@
 import React, {Component} from 'react';
-import logo from './logo.svg';
 import './App.css';
 import PropTypes from 'prop-types';
 import {findDOMNode} from 'react-dom';
+import BarcodeReader from 'JOB-master';
 import zxing from "instascan/src/zxing.js";
 
 const ZXing = zxing();
@@ -58,7 +58,8 @@ class App extends Component {
         };
         setInterval(function () {
             this.getScan();
-        }.bind(this),200); //here you can set the zxing interval
+        }.bind(this), 200); //here you can set the zxing interval
+
     }
 
     componentDidMount() {
@@ -70,6 +71,15 @@ class App extends Component {
             this.requestUserMedia();
         }
         this._analyzer = new Analyzer(this.video);
+
+
+        BarcodeReader.Init();
+        BarcodeReader.StreamCallback = function (result) {
+            if (result.length > 0) {
+                console.log(result[0].Value);
+            }
+        };
+        BarcodeReader.DecodeStream(this.video);
     }
 
     componentWillUnmount() {
@@ -95,16 +105,15 @@ class App extends Component {
     getScan() {
         if (!this.state.hasUserMedia) return null;
         const canvas = this.getCanvas();
-
         let analysis = this._analyzer.analyze();
         if (!analysis) {
             return null;
         }
-        else
-        {
-            //here you can extract the result
+        else {
+            //here you can extract the qr result
             console.log(analysis.result);
         }
+
         return null;
     }
 
@@ -308,14 +317,13 @@ class Analyzer {
                 return null;
             }
         }
-        catch(err)
-        {
+        catch (err) {
             console.log(err);
         }
 
         let result = window.zxDecodeResult;
         if (result != null) {
-            return { result: result, canvas: this.canvas };
+            return {result: result, canvas: this.canvas};
         }
 
         return null;
