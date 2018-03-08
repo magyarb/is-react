@@ -1,11 +1,8 @@
 import React, {Component} from 'react';
-import logo from './logo.svg';
 import './App.css';
 import PropTypes from 'prop-types';
 import {findDOMNode} from 'react-dom';
-import zxing from "instascan/src/zxing.js";
-
-const ZXing = zxing();
+import BarcodeReader from 'JOB-master';
 
 function hasGetUserMedia() {
     return !!(navigator.getUserMedia || navigator.webkitGetUserMedia ||
@@ -56,9 +53,10 @@ class App extends Component {
         this.state = {
             hasUserMedia: false,
         };
-        setInterval(function () {
+        /*setInterval(function () {
             this.getScan();
         }.bind(this),200); //here you can set the zxing interval
+        */
     }
 
     componentDidMount() {
@@ -69,7 +67,13 @@ class App extends Component {
         if (!this.state.hasUserMedia && !App.userMediaRequested) {
             this.requestUserMedia();
         }
-        this._analyzer = new Analyzer(this.video);
+        BarcodeReader.Init();
+        BarcodeReader.StreamCallback = function(result) {
+            if (result.length > 0) {
+                console.log(result[0].Value);
+            }
+        };
+        BarcodeReader.DecodeStream(this.video);
     }
 
     componentWillUnmount() {
@@ -96,15 +100,7 @@ class App extends Component {
         if (!this.state.hasUserMedia) return null;
         const canvas = this.getCanvas();
 
-        let analysis = this._analyzer.analyze();
-        if (!analysis) {
-            return null;
-        }
-        else
-        {
-            //here you can extract the result
-            console.log(analysis.result);
-        }
+
         return null;
     }
 
@@ -238,87 +234,6 @@ class App extends Component {
                 />
             </div>
         );
-    }
-}
-
-class Analyzer {
-    constructor(video) {
-        this.video = video;
-
-        this.imageBuffer = null;
-        this.sensorLeft = null;
-        this.sensorTop = null;
-        this.sensorWidth = null;
-        this.sensorHeight = null;
-
-        this.canvas = document.createElement('canvas');
-        this.canvas.style.display = 'none';
-        this.canvasContext = null;
-
-        this.decodeCallback = ZXing.Runtime.addFunction(function (ptr, len, resultIndex, resultCount) {
-            let result = new Uint8Array(ZXing.HEAPU8.buffer, ptr, len);
-            let str = String.fromCharCode.apply(null, result);
-            if (resultIndex === 0) {
-                window.zxDecodeResult = '';
-            }
-            window.zxDecodeResult += str;
-        });
-
-    }
-
-    analyze() {
-        if (!this.video.videoWidth) {
-            return null;
-        }
-
-        if (!this.imageBuffer) {
-            let videoWidth = this.video.videoWidth;
-            let videoHeight = this.video.videoHeight;
-
-            this.sensorWidth = videoWidth;
-            this.sensorHeight = videoHeight;
-            this.sensorLeft = Math.floor((videoWidth / 2) - (this.sensorWidth / 2));
-            this.sensorTop = Math.floor((videoHeight / 2) - (this.sensorHeight / 2));
-
-            this.canvas.width = this.sensorWidth;
-            this.canvas.height = this.sensorHeight;
-
-            this.canvasContext = this.canvas.getContext('2d');
-            this.imageBuffer = ZXing._resize(this.sensorWidth, this.sensorHeight);
-            return null;
-        }
-
-        this.canvasContext.drawImage(
-            this.video,
-            this.sensorLeft,
-            this.sensorTop,
-            this.sensorWidth,
-            this.sensorHeight
-        );
-
-        let data = this.canvasContext.getImageData(0, 0, this.sensorWidth, this.sensorHeight).data;
-        for (let i = 0, j = 0; i < data.length; i += 4, j++) {
-            let [r, g, b] = [data[i], data[i + 1], data[i + 2]];
-            ZXing.HEAPU8[this.imageBuffer + j] = Math.trunc((r + g + b) / 3);
-        }
-        try {
-            let err = ZXing._decode_qr(this.decodeCallback);
-
-            if (err) {
-                return null;
-            }
-        }
-        catch(err)
-        {
-            console.log(err);
-        }
-
-        let result = window.zxDecodeResult;
-        if (result != null) {
-            return { result: result, canvas: this.canvas };
-        }
-
-        return null;
     }
 }
 
