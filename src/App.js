@@ -264,16 +264,6 @@ class Analyzer {
             window.zxDecodeResult += str;
         });
 
-        this.decodeCallback2 = ZXing.Runtime.addFunction(function(ptr, len, resultIndex, resultCount, p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y) {
-            // Convert the result C string into a JS string.
-            var result = new Uint8Array(ZXing.HEAPU8.buffer, ptr, len);
-            let str = String.fromCharCode.apply(null, result);
-            if (resultIndex === 0) {
-                window.zxDecodeResult = '';
-            }
-            window.zxDecodeResult += str;
-            // drawPointsOnCanvas(p0x, p0y, p1x, p1y, p2x, p2y, p3x, p3y);
-        });
     }
 
     analyze() {
@@ -312,7 +302,7 @@ class Analyzer {
             ZXing.HEAPU8[this.imageBuffer + j] = Math.trunc((r + g + b) / 3);
         }
         try {
-            let err = ZXing._decode_any(this.decodeCallback2);
+            let err = ZXing._decode_qr(this.decodeCallback);
 
             if (err) {
                 return null;
