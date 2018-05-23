@@ -14,7 +14,7 @@ function hasGetUserMedia() {
 
 class App extends Component {
     static defaultProps = {
-        audio: true,
+        audio: false,
         className: '',
         height: 480,
         muted: false,
@@ -214,7 +214,7 @@ class App extends Component {
             return;
         }
         try {
-            const src = window.URL.createObjectURL(stream);
+            const src = window.HTMLMediaElement.srcObject(stream);
 
             this.stream = stream;
             this.setState({
